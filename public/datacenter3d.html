@@ -1,0 +1,1194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Data Center - Maxis DC Inventory</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0c10; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+
+    #top-bar {
+      position: absolute; top: 0; left: 0; right: 0; height: 56px;
+      background: rgba(13, 17, 23, 0.95);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 20px; z-index: 50;
+    }
+    #top-bar h1 { color: #e6edf3; font-size: 1.1rem; }
+    #top-bar .back-btn {
+      background: transparent; border: 1px solid rgba(255,255,255,0.25);
+      color: #e6edf3; padding: 8px 16px; border-radius: 5px;
+      cursor: pointer; text-decoration: none; font-size: 0.85rem;
+    }
+    #top-bar .back-btn:hover { border-color: #2fd07a; }
+
+    #location-controls { display: flex; gap: 10px; }
+    #location-controls select {
+      background: #1a2332; color: #e6edf3;
+      border: 1px solid rgba(255,255,255,0.15);
+      padding: 6px 12px; border-radius: 5px;
+    }
+
+    #canvas-container { width: 100%; height: 100%; padding-top: 56px; }
+
+    #tooltip {
+      position: absolute; pointer-events: none;
+      background: rgba(15, 20, 25, 0.95); color: #fff;
+      padding: 8px 12px; border-radius: 6px;
+      font-size: 0.85rem; border: 1px solid rgba(255, 255, 255, 0.4);
+      display: none; z-index: 200;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      max-width: 260px;
+    }
+    #tooltip strong { color: #2fd07a; }
+
+    #loading {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      color: #cfd8dc; font-size: 1.2rem; z-index: 30;
+    }
+
+    #rack-detail-overlay {
+      position: fixed; top: 0; right: 0;
+      width: 620px; max-width: 100%; height: 100%;
+      background: rgba(13, 17, 23, 0.98);
+      border-left: 1px solid rgba(255, 255, 255, 0.2);
+      color: #e6edf3; z-index: 100;
+      transform: translateX(100%);
+      transition: transform 0.35s ease;
+      display: flex; flex-direction: column;
+      box-shadow: -8px 0 32px rgba(0,0,0,0.6);
+    }
+    #rack-detail-overlay.open { transform: translateX(0); }
+
+    .detail-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 22px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      background: rgba(0,0,0,0.25);
+      flex-shrink: 0; gap: 12px;
+    }
+    .detail-header h2 { font-size: 1.15rem; font-weight: 600; }
+    .detail-header .close-btn {
+      background: transparent; border: 1px solid rgba(255,255,255,0.25);
+      color: #e6edf3; padding: 6px 14px; border-radius: 5px;
+      cursor: pointer; font-size: 0.85rem;
+    }
+    .detail-header .close-btn:hover { border-color: #2fd07a; }
+
+    .detail-body { flex: none; padding: 14px 22px 8px; display: flex; flex-direction: column; align-items: center; }
+    .rack-status {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 14px; border-radius: 20px;
+      font-size: 0.85rem; font-weight: 500;
+      margin-bottom: 16px; border: 1px solid rgba(255,255,255,0.1);
+    }
+    .rack-status.in-use { background: rgba(46, 160, 67, 0.15); color: #56d364; }
+    .rack-status.spare { background: rgba(139, 148, 158, 0.15); color: #8b949e; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .rack-status.in-use .status-dot { background: #56d364; box-shadow: 0 0 8px #56d364; }
+    .rack-status.spare .status-dot { background: #8b949e; }
+
+    .view-toggle {
+      display: flex; gap: 8px; margin-bottom: 16px;
+      background: rgba(255,255,255,0.04); padding: 4px;
+      border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);
+    }
+    .view-toggle button {
+      flex: 1; padding: 10px 16px; background: transparent;
+      border: none; color: #8b949e; font-size: 0.9rem;
+      cursor: pointer; border-radius: 6px;
+    }
+    .view-toggle button.active {
+      background: rgba(47, 208, 122, 0.15); color: #2fd07a; font-weight: 600;
+    }
+
+    #rack-sim-container {
+      width: 100%; max-width: 540px; height: 48vh; min-height: 300px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px; overflow: hidden;
+      background: linear-gradient(180deg, #1a2332 0%, #0d1117 100%);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+      position: relative; flex-shrink: 0;
+    }
+
+    .detail-footer { flex: 1; min-height: 250px; display: flex; flex-direction: column; padding: 12px 22px 14px; border-top: 1px solid rgba(255,255,255,0.08); }
+
+    @media (max-width: 640px) {
+      #rack-detail-overlay { width: 100%; }
+      #rack-sim-container { height: 46vh; }
+    }
+      .back-btn.pri { border-color:#2fd07a; color:#2fd07a; }
+    #top-bar .grp { display:flex; gap:8px; align-items:center; }
+    #mgr { position:fixed; top:56px; left:0; bottom:0; width:390px; max-width:100%; z-index:120; background:rgba(13,17,23,.98); color:#e6edf3; border-right:1px solid rgba(255,255,255,.2); transform:translateX(-100%); transition:transform .3s; display:flex; flex-direction:column; box-shadow:8px 0 32px rgba(0,0,0,.6); font-size:.85rem; }
+    #mgr.open { transform:none; }
+    #mgr .mh { display:flex; justify-content:space-between; align-items:center; padding:14px 16px; border-bottom:1px solid rgba(255,255,255,.08); }
+    #mgr button { background:#1a2332; color:#e6edf3; border:1px solid rgba(255,255,255,.18); border-radius:6px; padding:7px 12px; cursor:pointer; font:inherit; }
+    #mgr button:hover { border-color:#2fd07a; }
+    #mgr .tabs { display:flex; gap:6px; padding:10px 16px 0; }
+    #mgr .tabs button.on { background:rgba(79,195,247,.18); color:#2fd07a; border-color:#2fd07a; }
+    #mgr .pn { display:none; padding:14px 16px; overflow:auto; flex:1; }
+    #mgr .pn.on { display:flex; flex-direction:column; }
+    #mgr .g { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    #mgr .g .f2 { grid-column:span 2; }
+    #mgr label { display:block; font-size:.72rem; color:#8b949e; margin-bottom:3px; }
+    #mgr input, #mgr select { width:100%; background:#0d1117; color:#e6edf3; border:1px solid rgba(255,255,255,.18); border-radius:6px; padding:7px 9px; font:inherit; }
+    #mgr .go { background:#1f9d5a; border-color:#1f9d5a; margin-top:14px; font-weight:600; }
+    #mg-err, #mg-err2 { color:#ff7b72; min-height:18px; margin-top:10px; }
+    #ai-log { flex:1; overflow:auto; display:flex; flex-direction:column; gap:8px; }
+    .cm { padding:8px 11px; border-radius:10px; max-width:92%; white-space:pre-line; line-height:1.4; }
+    .cm.bot { background:#1a2332; align-self:flex-start; } .cm.me { background:#1f9d5a; align-self:flex-end; }
+    .cb { display:flex; gap:6px; flex-wrap:wrap; }
+    .ai-note { color:#8b949e; font-size:.75rem; line-height:1.35; margin-bottom:8px; }
+    #ai-in { display:flex; gap:6px; margin-top:10px; }
+    #mg-toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#1a2332; color:#e6edf3; border:1px solid #2fd07a; padding:10px 16px; border-radius:8px; z-index:300; display:none; }
+    #b-add-here { background:#1a2332; color:#e6edf3; border:1px solid rgba(255,255,255,.2); border-radius:6px; padding:5px 10px; cursor:pointer; font-size:.78rem; }
+    #b-add-here:hover { border-color:#2fd07a; }
+    #b-edit-rack { background:#1a2332; color:#e6edf3; border:1px solid rgba(255,255,255,.2); border-radius:6px; padding:5px 10px; cursor:pointer; font-size:.95em; }
+    #b-edit-rack:hover { border-color:#2fd07a; }
+
+    /* top bar */
+    #top-bar .tl { display:flex; align-items:center; gap:14px; }
+    #top-bar h1 { font-size:1.05rem; font-weight:600; }
+    #top-bar .back-btn { font-family:inherit; display:inline-flex; align-items:center; }
+    #location-controls label { display:flex; align-items:center; gap:6px; color:#8b949e; font-size:.78rem; }
+    .back-btn.pri { background:#2fd07a; border-color:#2fd07a; color:#06210f; font-weight:600; }
+    .back-btn.pri:hover { filter:brightness(1.1); }
+    @media (max-width:900px) { #top-bar h1 { display:none; } }
+    /* rack panel: 3D view gets 60%+ of the height, only the device list scrolls */
+    .ctl { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; max-width:540px; margin-bottom:10px; }
+    .ctl .rack-status, .ctl .view-toggle { margin:0; }
+    .view-toggle button { padding:7px 14px; }
+    .tags-h { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; color:#e6edf3; font-size:.85rem; }
+    #rack-detail-overlay { overflow-y:auto; }
+    #rack-devices { flex:none; height:170px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; padding-right:4px; }
+    #rack-devices .dv { flex:none; height:38px; display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:#161d28; color:#e6edf3; border:1px solid rgba(255,255,255,.1); border-radius:6px; padding:8px 10px; cursor:pointer; font:inherit; font-size:.82rem; }
+    #rack-devices .dv:hover { border-color:#2fd07a; }
+    .dv .u { min-width:64px; color:#2fd07a; font-weight:600; }
+    .dv .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .dv .st { color:#8b949e; font-size:.72rem; }
+    .tags-hint { font-size:.74rem; color:#8b949e; margin-top:6px; }
+
+    /* Rack panel: every size is in em and the em follows the window HEIGHT (1.6vh), so the layout keeps
+       the same proportions at any browser zoom level. */
+    #rack-detail-overlay { font-size:1.6vh; width:44em; max-width:100%; overflow:hidden; }
+    .detail-header { padding:1.1em 1.5em; }
+    .detail-header h2 { font-size:1.25em; }
+    .detail-header .close-btn { font-size:.85em; padding:.45em 1em; }
+    .detail-body { padding:1em 1.5em .5em; }
+    .ctl { max-width:38em; margin-bottom:.7em; }
+    .rack-status { font-size:.92em; padding:.4em 1em; }
+    .view-toggle button { font-size:.96em; padding:.5em 1em; }
+    #rack-sim-container { max-width:38em; height:48vh; min-height:0; }
+    .detail-footer { min-height:0; padding:.8em 1.5em 1em; }
+    .tags-h { font-size:.92em; margin-bottom:.5em; }
+    #b-add-here { font-size:.95em; padding:.5em 1em; }
+    #b-edit-rack { font-size:.95em; padding:.5em 1em; }
+    #rack-devices { font-size:.82em; height:12.3em; gap:.5em; }
+    #rack-devices .dv { height:2.7em; font-size:1.08em; padding:0 .8em; }
+    .tags-hint { font-size:.82em; }
+    @media (max-width:640px) { #rack-detail-overlay { width:100%; } }
+  </style>
+</head>
+<body>
+  <div id="top-bar">
+    <div class="tl"><a href="index.html" class="back-btn" title="Back to the inventory">← Inventory</a><h1>3D Data Center</h1></div>
+    <div id="location-controls">
+      <label>Location <select id="location-select"><option value="">Location</option></select></label>
+      <label>Row <select id="row-select"><option value="">Row</option></select></label>
+    </div>
+    <div class="grp" id="mgr-btns"><button class="back-btn pri" id="b-add">＋ Add device</button><button class="back-btn" id="b-rack">＋ Add rack</button><button class="back-btn" id="b-ai">Assistant</button></div>
+  </div>
+
+  <div id="loading">Loading 3D Data Center...</div>
+  <div id="tooltip"></div>
+  <div id="canvas-container"></div>
+
+  <div id="rack-detail-overlay">
+    <div class="detail-header">
+      <h2 id="detail-rack-title">Rack Details</h2>
+      <button class="close-btn" id="close-detail">Back to 3D</button>
+    </div>
+    <div class="detail-body">
+      <div class="ctl"><div class="rack-status" id="rack-status">
+        <span class="status-dot"></span>
+        <span id="rack-status-text">In Use</span>
+      </div>
+      <div class="view-toggle" id="view-toggle">
+        <button class="active" data-view="front">Front View</button>
+        <button data-view="back">Back View</button>
+      </div></div>
+      <div id="rack-sim-container"></div>
+    </div>
+    <div class="detail-footer">
+      <div class="tags-h"><b>Devices in this rack <span id="dev-count"></span></b><span><button id="b-edit-rack">✎ Edit rack</button> <button id="b-add-here">＋ Add device</button></span></div>
+      <div id="rack-devices"></div>
+      <div class="tags-hint">Showing 4 at a time, scroll for more. Click a device for its details. Drag to turn the rack, scroll wheel to zoom.</div>
+    </div>
+  </div>
+
+  <div id="mgr">
+    <div class="mh"><b>Manage infrastructure</b><button id="mg-x">✕</button></div>
+    <div class="tabs"><button data-t="dev">Device</button><button data-t="rack">Rack</button><button data-t="ai">🤖 Assistant</button></div>
+    <div class="pn" id="p-dev">
+      <div class="g">
+        <div><label>Location</label><input id="m-loc" list="dl-loc"></div>
+        <div><label>Row</label><input id="m-row" list="dl-row"></div>
+        <div><label>Rack</label><input id="m-rack"></div>
+        <div><label>Type</label><select id="m-type"><option>Firewall</option><option>Router</option><option>Switch</option><option>Load Balancer</option><option>Server</option><option>Storage</option><option value="">Other</option></select></div>
+        <div class="f2"><label>Model / name *</label><input id="m-model" placeholder="e.g. FortiGate 600E"></div>
+        <div><label>Start U (blank = first free)</label><input id="m-u" type="number" min="1" max="42"></div>
+        <div><label>Size (U)</label><input id="m-size" type="number" min="1" max="42" value="1"></div>
+        <div class="f2"><label>Serial number</label><input id="m-serial"></div>
+        <div><label>Status</label><select id="m-status"><option>In use</option><option>Not in use</option></select></div>
+        <div><label>Asset tag</label><input id="m-tag"></div>
+        <div><label>Purpose</label><input id="m-purpose"></div>
+        <div><label>Owner</label><input id="m-owner"></div>
+      </div>
+      <div id="mg-err"></div><button class="go" id="mg-save">Add to rack</button>
+    </div>
+    <div class="pn" id="p-rack">
+      <div class="g"><div class="f2"><label>Location</label><input id="r-loc" list="dl-loc"></div><div><label>Row</label><input id="r-row" list="dl-row"></div><div><label>Current rack name</label><input id="r-no"></div><div><label>New rack name</label><input id="r-new" placeholder="e.g. Core Rack"></div></div>
+      <div id="mg-err2"></div><button class="go" id="mg-rack">Create empty rack</button>
+      <button class="go" id="mg-rename" style="display:none">Save rack name</button>
+      <button id="mg-delete" style="display:none;color:#ff7b72;border-color:#ff7b72">Delete rack and its devices</button>
+    </div>
+    <div class="pn" id="p-ai"><div class="ai-note">Ask about this data center, inventory terms, or what you are looking at. Add/rack requests still require confirmation before they change inventory.</div><div id="ai-log"></div><div id="ai-in"><input id="ai-t" placeholder="Why is U position important?"><button id="ai-go">Send</button></div></div>
+    <datalist id="dl-loc"></datalist><datalist id="dl-row"></datalist>
+  </div>
+  <div id="mg-toast"></div>
+  <script src="vendor/three.min.js"></script>
+  <script>
+    // ============================================================
+    // CONFIG
+    // ============================================================
+    const CONFIG = {
+      room: { length: 40, width: 14, height: 5 },
+      aisleWidth: 2.4,
+      rack: { width: 0.6, depth: 1.0, height: 2.1 },
+      // How to open an item in inventory:
+      // Option A: open in same tab with hash
+      openItemUrl: 'index.html#item=',
+      // Option B: send message to parent window (if opened as iframe/popup)
+      usePostMessage: false
+    };
+
+    let rackData = [];
+    let currentLocation = '';
+    let currentRow = '';
+
+    // ============================================================
+    // SAMPLE DATA FALLBACK
+    // ============================================================
+    function getSampleRacks() {
+      function rack(prefix, num, type) {
+        const id = prefix + '-' + String(num).padStart(2, '0');
+        return {
+          id: id,
+          location: 'HDC',
+          row: 'DC 4',
+          rack: String(num),
+          status: type === 'spare' ? 'Spare' : 'Active',
+          equipment: type === 'spare' ? [] : [
+            { id: id + '-FW-01', label: 'Firewall', type: 'network', uPosition: 39, uSize: 1, serial: 'SN-FW-' + num, status: 'In use' },
+            { id: id + '-SW-01', label: 'Core Switch', type: 'network', uPosition: 36, uSize: 2, serial: 'SN-SW-' + num, status: 'In use' },
+            { id: id + '-SRV-01', label: 'Server 01', type: 'server', uPosition: 30, uSize: 4, serial: 'SN-SRV-' + num + '-1', status: 'In use' },
+            { id: id + '-SRV-02', label: 'Server 02', type: 'server', uPosition: 24, uSize: 4, serial: 'SN-SRV-' + num + '-2', status: 'In use' },
+            { id: id + '-SRV-03', label: 'Server 03', type: 'server', uPosition: 18, uSize: 4, serial: 'SN-SRV-' + num + '-3', status: 'In use' },
+            { id: id + '-PDU-L', label: 'PDU Left', type: 'pdu', uPosition: 2, uSize: 8, serial: 'SN-PDU-L-' + num, status: 'In use' },
+            { id: id + '-PDU-R', label: 'PDU Right', type: 'pdu', uPosition: 2, uSize: 8, serial: 'SN-PDU-R-' + num, status: 'In use' }
+          ]
+        };
+      }
+      const list = [];
+      for (let i = 1; i <= 12; i++) list.push(rack('RL', i, i % 3 === 0 ? 'spare' : 'active'));
+      for (let i = 1; i <= 12; i++) list.push(rack('RR', i, i % 4 === 0 ? 'spare' : 'active'));
+      return list;
+    }
+
+    // ============================================================
+    // CAMERA CONTROLS
+    // ============================================================
+    function attachCameraControls(camera, domElement, target) {
+      let isDragging = false, startX = 0, startY = 0;
+      let spherical = new THREE.Spherical().setFromVector3(camera.position.clone().sub(target));
+
+      domElement.addEventListener('pointerdown', (e) => {
+        if (e.button === 0) isDragging = true;
+        startX = e.clientX; startY = e.clientY;
+      });
+      domElement.addEventListener('pointermove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - startX, dy = e.clientY - startY;
+        startX = e.clientX; startY = e.clientY;
+        spherical.theta -= dx * 0.008;
+        spherical.phi += dy * 0.008;
+        spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, spherical.phi));
+        camera.position.setFromSpherical(spherical).add(target);
+        camera.lookAt(target);
+      });
+      domElement.addEventListener('pointerup', () => isDragging = false);
+      domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+      domElement.addEventListener('wheel', (e) => {
+        const dir = camera.position.clone().sub(target).normalize();
+        const dist = camera.position.distanceTo(target);
+        const newDist = Math.max(1, Math.min(35, dist + e.deltaY * 0.01));
+        camera.position.copy(target).add(dir.multiplyScalar(newDist));
+        spherical.setFromVector3(camera.position.clone().sub(target));
+      }, { passive: false });
+    }
+
+    function createBox(w, h, d, material, x, y, z, castShadow, receiveShadow) {
+      if (castShadow === undefined) castShadow = true;
+      if (receiveShadow === undefined) receiveShadow = true;
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = castShadow; mesh.receiveShadow = receiveShadow;
+      return mesh;
+    }
+
+    // ============================================================
+    // MAIN SCENE
+    // ============================================================
+    const container = document.getElementById('canvas-container');
+    const tooltip = document.getElementById('tooltip');
+    const loading = document.getElementById('loading');
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0b0c10);
+    scene.fog = new THREE.Fog(0x0b0c10, 10, 50);
+
+    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 2.2, 14);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    container.appendChild(renderer.domElement);
+
+    attachCameraControls(camera, renderer.domElement, new THREE.Vector3(0, 1.5, 0));
+
+    // Materials
+    const matFloor = new THREE.MeshStandardMaterial({ color: 0xf5f5f5, roughness: 0.3, metalness: 0.05 });
+    const matFloorGrid = new THREE.MeshStandardMaterial({ color: 0xdce3e8, roughness: 0.35 });
+    const matVent = new THREE.MeshStandardMaterial({ color: 0xcfd8dc, roughness: 0.5, metalness: 0.4 });
+    const matRackFrameInUse = new THREE.MeshStandardMaterial({ color: 0xeaeff2, roughness: 0.25, metalness: 0.3 });
+    const matRackFrameSpare = new THREE.MeshStandardMaterial({ color: 0x8b949e, roughness: 0.35, metalness: 0.25 });
+    const matRackDoor = new THREE.MeshStandardMaterial({ color: 0x1a1f24, roughness: 0.4, metalness: 0.6 });
+    const matRackInner = new THREE.MeshStandardMaterial({ color: 0x0d1117, roughness: 0.7 });
+    const matHighlight = new THREE.MeshStandardMaterial({ color: 0x4fc3f7, emissive: 0x0088cc, emissiveIntensity: 0.25, transparent: true, opacity: 0.35 });
+    const matCeiling = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 });
+    const matLightPanel = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const matCableTray = new THREE.MeshStandardMaterial({ color: 0x8d99a6, roughness: 0.5, metalness: 0.5 });
+    const matLed = new THREE.MeshBasicMaterial({ color: 0x00ff44, transparent: true, opacity: 0.9 });
+    const matSpareLed = new THREE.MeshBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.4 });
+
+    // Room
+    const roomGroup = new THREE.Group();
+    scene.add(roomGroup);
+    const floorTilesX = 12, floorTilesZ = 34;
+    const tileSize = 1.18, tileGap = 0.02, fullSize = tileSize + tileGap;
+    for (let ix = 0; ix < floorTilesX; ix++) {
+      for (let iz = 0; iz < floorTilesZ; iz++) {
+        const x = (ix - (floorTilesX - 1) / 2) * fullSize;
+        const z = (iz - (floorTilesZ - 1) / 2) * fullSize;
+        const isAisleCenter = Math.abs(x) < CONFIG.aisleWidth / 2;
+        const isVentRow = isAisleCenter && (iz % 3 === 1);
+        const mat = isVentRow ? matVent : ((ix + iz) % 2 === 0 ? matFloor : matFloorGrid);
+        roomGroup.add(createBox(tileSize, 0.05, tileSize, mat, x, 0.025, z, false, true));
+      }
+    }
+    const wallH = 5;
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0xeef1f3, roughness: 0.4 });
+    roomGroup.add(createBox(14, wallH, 0.2, wallMat, 0, wallH/2, -20, false, true));
+    roomGroup.add(createBox(0.2, wallH, 40, wallMat, -7, wallH/2, 0, false, true));
+    roomGroup.add(createBox(0.2, wallH, 40, wallMat, 7, wallH/2, 0, false, true));
+    for (let ix = 0; ix < floorTilesX; ix++) {
+      for (let iz = 0; iz < floorTilesZ; iz++) {
+        const x = (ix - (floorTilesX - 1) / 2) * fullSize;
+        const z = (iz - (floorTilesZ - 1) / 2) * fullSize;
+        const isLight = Math.abs(x) < 0.8 && (iz % 6 === 3 || iz % 6 === 4);
+        roomGroup.add(createBox(tileSize, 0.04, tileSize, isLight ? matLightPanel : matCeiling, x, 4.98, z, false, false));
+      }
+    }
+    roomGroup.add(createBox(0.3, 0.15, 38, matCableTray, -2.5, 4.6, 0, false, true));
+    roomGroup.add(createBox(0.3, 0.15, 38, matCableTray, 2.5, 4.6, 0, false, true));
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+    dirLight.position.set(5, 8, 12); dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048, 2048);
+    scene.add(dirLight);
+    scene.add(new THREE.HemisphereLight(0xddeeff, 0x0b0c10, 0.25));
+
+    let rackMeshes = [];
+
+    function clearMainRacks() {
+      rackMeshes.forEach(g => scene.remove(g));
+      rackMeshes = [];
+    }
+
+    function buildMainRacks(data) {
+      clearMainRacks();
+      const sorted = [...data].sort((a, b) => {
+        const na = parseInt(a.rack) || 0;
+        const nb = parseInt(b.rack) || 0;
+        return na - nb;
+      });
+      const total = sorted.length;
+      const perSide = Math.ceil(total / 2);
+      sorted.forEach((rack, i) => {
+        const side = i < perSide ? 'left' : 'right';
+        const idx = side === 'left' ? i : i - perSide;
+        rack.x = side === 'left' ? -3.5 : 3.5;
+        rack.z = -((perSide - 1) * 1.2) / 2 + idx * 1.2;
+
+        const isInUse = rack.status !== 'Spare' && rack.equipment.length > 0;
+        const frameMat = isInUse ? matRackFrameInUse : matRackFrameSpare;
+        const group = new THREE.Group();
+        group.position.set(rack.x, 0, rack.z);
+        group.userData = { rackId: rack.id, isRack: true, status: isInUse ? 'in-use' : 'spare', rack };
+
+        group.add(createBox(CONFIG.rack.width, CONFIG.rack.height, CONFIG.rack.depth, frameMat, 0, CONFIG.rack.height/2, 0));
+        group.add(createBox(CONFIG.rack.width - 0.06, CONFIG.rack.height - 0.1, CONFIG.rack.depth - 0.08, matRackInner, 0, CONFIG.rack.height/2, 0, false, false));
+        group.add(createBox(CONFIG.rack.width - 0.04, CONFIG.rack.height - 0.08, 0.03, matRackDoor, 0, CONFIG.rack.height/2, CONFIG.rack.depth/2 + 0.015, false, true));
+        group.add(createBox(CONFIG.rack.width - 0.08, CONFIG.rack.height - 0.12, 0.02, isInUse ? matLed : matSpareLed, 0, CONFIG.rack.height/2, CONFIG.rack.depth/2 - 0.02, false, false));
+        group.add(createBox(CONFIG.rack.width - 0.04, CONFIG.rack.height - 0.08, 0.03, matRackDoor, 0, CONFIG.rack.height/2, -CONFIG.rack.depth/2 - 0.015, false, true));
+
+        const hitBox = new THREE.Mesh(new THREE.BoxGeometry(CONFIG.rack.width + 0.1, CONFIG.rack.height, CONFIG.rack.depth + 0.2), new THREE.MeshBasicMaterial({ visible: false }));
+        hitBox.position.y = CONFIG.rack.height/2;
+        hitBox.userData = { rackId: rack.id, isRack: true, parentGroup: group };
+        group.add(hitBox);
+
+        const highlight = createBox(CONFIG.rack.width + 0.12, CONFIG.rack.height + 0.05, CONFIG.rack.depth + 0.25, matHighlight, 0, CONFIG.rack.height/2, 0, false, false);
+        highlight.visible = false; highlight.userData = { isHighlight: true };
+        group.add(highlight);
+
+        scene.add(group);
+        rackMeshes.push(group);
+      });
+    }
+
+    // ============================================================
+    // RACK DETAIL SIMULATION
+    // ============================================================
+    let simScene, simCamera, simRenderer, simRackGroup, simFrontDoor, simBackDoor;
+    let currentRackId = null, currentView = 'front';
+    let simEquipmentMeshes = [];
+    let isDetailOpen = false;
+
+    // Rack viewer: drag sideways to turn the rack, drag up/down to move along it (the camera never tilts,
+    // so there is no top/bottom view), mouse wheel to zoom. Nothing moves on its own.
+    const rv = { yaw: 0, dist: 3.2, y: 1.1, ang: 0 };
+    let dragging = false, dragX = 0, dragY = 0, simMoved = 0;
+    function resetRackView() { rv.yaw = 0; rv.dist = 3.2; rv.y = 1.1; rv.ang = currentView === 'front' ? 0 : Math.PI; }
+    function attachTurntable(el) {
+      el.addEventListener('pointerdown', e => { dragging = true; dragX = e.clientX; dragY = e.clientY; simMoved = 0; if (el.setPointerCapture) el.setPointerCapture(e.pointerId); });
+      el.addEventListener('pointermove', e => {
+        if (!dragging) return;
+        const dx = e.clientX - dragX, dy = e.clientY - dragY; dragX = e.clientX; dragY = e.clientY; simMoved += Math.abs(dx) + Math.abs(dy);
+        rv.yaw = Math.max(-1.6, Math.min(1.6, rv.yaw + dx * 0.008));
+        rv.y = Math.max(0.15, Math.min(2.1, rv.y + dy * 0.005));
+      });
+      const end = () => { dragging = false; };
+      el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+      el.addEventListener('wheel', e => { e.preventDefault(); rv.dist = Math.max(1.3, Math.min(5, rv.dist + e.deltaY * 0.004)); }, { passive: false });
+    }
+    function updateCamera() {
+      if (!simRackGroup) return;
+      rv.ang += ((currentView === 'front' ? 0 : Math.PI) - rv.ang) * 0.12;   // glides round when switching Front/Back
+      simRackGroup.rotation.y = rv.yaw;
+      simCamera.position.set(Math.sin(rv.ang) * rv.dist, rv.y + 0.1, Math.cos(rv.ang) * rv.dist);
+      simCamera.lookAt(0, rv.y, 0);
+    }
+
+    function initRackSimulation() {
+      const simContainer = document.getElementById('rack-sim-container');
+      simScene = new THREE.Scene();
+      simScene.background = new THREE.Color(0x1a2332);
+      simCamera = new THREE.PerspectiveCamera(45, simContainer.clientWidth / simContainer.clientHeight, 0.1, 100);
+      simCamera.position.set(0, 1.2, 3.2);
+      simRenderer = new THREE.WebGLRenderer({ antialias: true });
+      simRenderer.setSize(simContainer.clientWidth, simContainer.clientHeight);
+      simRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      simRenderer.shadowMap.enabled = true;
+      simContainer.appendChild(simRenderer.domElement);
+
+      attachTurntable(simRenderer.domElement);
+
+      simScene.add(new THREE.AmbientLight(0xffffff, 0.5));
+      const simDir = new THREE.DirectionalLight(0xffffff, 0.9);
+      simDir.position.set(2, 5, 5); simDir.castShadow = true;
+      simScene.add(simDir);
+      simScene.add(new THREE.HemisphereLight(0xddeeff, 0x0b0c10, 0.4));
+      simScene.add(new THREE.PointLight(0xffffff, 0.8, 4).position.set(0, 1.1, 1.5));
+      simScene.add(new THREE.PointLight(0xffffff, 0.6, 4).position.set(0, 1.1, -1.5));
+      simScene.add(createBox(4, 0.05, 4, new THREE.MeshStandardMaterial({ color: 0x22272e }), 0, -0.025, 0, false, true));
+
+      simRenderer.domElement.addEventListener('pointermove', onSimPointerMove);
+      simRenderer.domElement.addEventListener('click', onSimClick);
+    }
+
+    function clearRackSimulation() {
+      if (simRackGroup) {
+        simScene.remove(simRackGroup);
+        simRackGroup.traverse((child) => { if (child.geometry) child.geometry.dispose(); });
+        simRackGroup = null;
+      }
+      simEquipmentMeshes = [];
+    }
+
+    function createOpenRackFrame(group, isInUse) {
+      const frameColor = isInUse ? 0xeaeff2 : 0x8b949e;
+      const frameMat = new THREE.MeshStandardMaterial({ color: frameColor, roughness: 0.25, metalness: 0.3 });
+      const railMat = new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.4, metalness: 0.5 });
+      const w = 0.62, h = 2.1, d = 1.0, t = 0.03;
+
+      group.add(createBox(t, h, t, frameMat, -w/2+t/2, h/2, -d/2+t/2, true, true));
+      group.add(createBox(t, h, t, frameMat, w/2-t/2, h/2, -d/2+t/2, true, true));
+      group.add(createBox(t, h, t, frameMat, -w/2+t/2, h/2, d/2-t/2, true, true));
+      group.add(createBox(t, h, t, frameMat, w/2-t/2, h/2, d/2-t/2, true, true));
+
+      group.add(createBox(w, t, t, frameMat, 0, h-t/2, -d/2+t/2, true, true));
+      group.add(createBox(w, t, t, frameMat, 0, h-t/2, d/2-t/2, true, true));
+      group.add(createBox(t, t, d-2*t, frameMat, -w/2+t/2, h-t/2, 0, true, true));
+      group.add(createBox(t, t, d-2*t, frameMat, w/2-t/2, h-t/2, 0, true, true));
+
+      group.add(createBox(w, t, t, frameMat, 0, t/2, -d/2+t/2, true, true));
+      group.add(createBox(w, t, t, frameMat, 0, t/2, d/2-t/2, true, true));
+      group.add(createBox(t, t, d-2*t, frameMat, -w/2+t/2, t/2, 0, true, true));
+      group.add(createBox(t, t, d-2*t, frameMat, w/2-t/2, t/2, 0, true, true));
+
+      for (let i = 0; i <= 42; i++) {
+        const ry = i * (2.06 / 42) + 0.02;
+        group.add(createBox(0.015, 0.006, 0.9, railMat, -0.25, ry, 0, false, true));
+        group.add(createBox(0.015, 0.006, 0.9, railMat, 0.25, ry, 0, false, true));
+      }
+    }
+
+    function createSimulationRack(rack) {
+      clearRackSimulation();
+      const isInUse = rack.status !== 'Spare' && rack.equipment.length > 0;
+      const group = new THREE.Group();
+      simRackGroup = group;
+
+      createOpenRackFrame(group, isInUse);
+
+      const doorMat = new THREE.MeshStandardMaterial({
+        color: 0x1a1f24, roughness: 0.4, metalness: 0.6,
+        transparent: true, opacity: 0.15, side: THREE.DoubleSide
+      });
+      simFrontDoor = new THREE.Group();
+      simFrontDoor.add(createBox(0.58, 2.02, 0.02, doorMat, 0.29, 1.05, 0, false, true));
+      simFrontDoor.position.set(-0.29, 0, 0.51);
+      group.add(simFrontDoor);
+
+      simBackDoor = new THREE.Group();
+      simBackDoor.add(createBox(0.58, 2.02, 0.02, doorMat, -0.29, 1.05, 0, false, true));
+      simBackDoor.position.set(0.29, 0, -0.51);
+      group.add(simBackDoor);
+
+      if (isInUse && rack.equipment.length > 0) {
+        rack.equipment.forEach(item => {
+          const itemH = (item.uSize || 1) * (2.06 / 42);
+          const itemY = (item.uPosition || 1) * (2.06 / 42) + 0.02 + itemH / 2;
+          if (item.type === 'pdu') createPDU(group, item, itemY, itemH);
+          else if (item.type === 'server') createServer(group, item, itemY, itemH);
+          else if (item.type === 'storage') createStorageArray(group, item, itemY, itemH);
+          else createNetworkDevice(group, item, itemY, itemH);
+        });
+        createCableBundle(group);
+      } else {
+        for (let i = 0; i < 6; i++) {
+          group.add(createBox(0.5, 0.02, 0.8, new THREE.MeshStandardMaterial({ color: 0x444c56 }), 0, 0.3 + i * 0.3, 0, false, true));
+        }
+      }
+
+      const statusColor = isInUse ? 0x00ff44 : 0x888888;
+      group.add(new THREE.PointLight(statusColor, isInUse ? 1.2 : 0.2, 2).position.set(0, 2.25, 0));
+      group.add(createBox(0.12, 0.04, 0.12, new THREE.MeshBasicMaterial({ color: statusColor }), 0, 2.18, 0, false, false));
+      group.add(new THREE.PointLight(0x4fc3f7, 0.4, 3).position.set(0, 1.1, 0));
+      simScene.add(group);
+
+      simFrontDoor.rotation.y = -Math.PI / 2.5;
+      simBackDoor.rotation.y = 0;
+      simCamera.position.set(0, 1.2, 2.6);
+      simCamera.lookAt(0, 1.1, 0);
+    }
+
+    function addEquipmentMesh(group, mesh, item) {
+      mesh.userData = { isEquipment: true, equipmentId: item.id, label: item.label, item };
+      group.add(mesh);
+      simEquipmentMeshes.push(mesh);
+
+      const hitBox = new THREE.Mesh(
+        new THREE.BoxGeometry(mesh.geometry.parameters.width + 0.04, mesh.geometry.parameters.height + 0.02, mesh.geometry.parameters.depth + 0.05),
+        new THREE.MeshBasicMaterial({ visible: false })
+      );
+      hitBox.position.copy(mesh.position);
+      hitBox.userData = { isEquipment: true, equipmentId: item.id, label: item.label, item };
+      group.add(hitBox);
+      simEquipmentMeshes.push(hitBox);
+    }
+
+    function createServer(group, item, y, h) {
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 0x4a4a5e, roughness: 0.25, metalness: 0.6 });
+      const bezelMat = new THREE.MeshStandardMaterial({ color: 0x323242, roughness: 0.3, metalness: 0.6 });
+      const ventMat = new THREE.MeshStandardMaterial({ color: 0x111116, roughness: 0.7 });
+      const ledGreen = new THREE.MeshBasicMaterial({ color: 0x00ff44 });
+      const ledBlue = new THREE.MeshBasicMaterial({ color: 0x00ccff });
+
+      const chassis = createBox(0.48, h - 0.015, 0.92, bodyMat, 0, y, 0.02, true, true);
+      addEquipmentMesh(group, chassis, item);
+
+      group.add(createBox(0.46, h - 0.05, 0.015, bezelMat, 0, y, 0.49, false, true));
+      for (let i = 0; i < 5; i++) {
+        group.add(createBox(0.4, 0.01, 0.003, ventMat, 0, y - h * 0.3 + i * h * 0.15, 0.5, false, false));
+      }
+      group.add(createBox(0.05, 0.05, 0.008, ledGreen, 0.18, y + h * 0.25, 0.5, false, false));
+      group.add(createBox(0.05, 0.02, 0.008, ledBlue, -0.18, y + h * 0.25, 0.5, false, false));
+      group.add(createBox(0.34, 0.01, 0.004, new THREE.MeshBasicMaterial({ color: 0x00ff44 }), 0, y - h * 0.15, 0.5, false, false));
+
+      group.add(createBox(0.46, h - 0.05, 0.015, new THREE.MeshStandardMaterial({ color: 0x1a1a20 }), 0, y, -0.44, false, true));
+      for (let i = 0; i < 4; i++) {
+        group.add(createBox(0.05, 0.03, 0.008, ledBlue, -0.15 + i * 0.1, y + h * 0.1, -0.45, false, false));
+      }
+    }
+
+    function createNetworkDevice(group, item, y, h) {
+      const kind = String(item.kind || item.label || '').toLowerCase();
+      const bodyMat = new THREE.MeshStandardMaterial({ color: kind.includes('firewall') ? 0x6a3a2a : kind.includes('router') ? 0x4a3a7a : 0x3a5a4a, roughness: 0.25, metalness: 0.6 });
+      const chassis = createBox(0.48, h - 0.015, 0.92, bodyMat, 0, y, 0.02, true, true);
+      addEquipmentMesh(group, chassis, item);
+
+      const ledColor = kind.includes('firewall') ? 0xffaa00 : kind.includes('router') ? 0xcc66ff : 0x00ccff;
+      const ledMat = new THREE.MeshBasicMaterial({ color: ledColor });
+      for (let i = 0; i < 24; i++) {
+        group.add(createBox(0.015, 0.015, 0.005, ledMat, -0.23 + i * 0.02, y + h * 0.05, 0.5, false, false));
+      }
+      group.add(createBox(0.46, h * 0.35, 0.005, new THREE.MeshStandardMaterial({ color: 0x0d1f16 }), 0, y - h * 0.1, 0.5, false, false));
+
+      group.add(createBox(0.46, h - 0.05, 0.015, new THREE.MeshStandardMaterial({ color: 0x1a1a20 }), 0, y, -0.44, false, true));
+      for (let i = 0; i < 8; i++) {
+        group.add(createBox(0.035, 0.035, 0.008, new THREE.MeshBasicMaterial({ color: 0x0088ff }), -0.22 + i * 0.063, y, -0.45, false, false));
+      }
+    }
+
+    function createStorageArray(group, item, y, h) {
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 0x5a4a3a, roughness: 0.25, metalness: 0.6 });
+      const chassis = createBox(0.48, h - 0.015, 0.92, bodyMat, 0, y, 0.02, true, true);
+      addEquipmentMesh(group, chassis, item);
+
+      for (let row = 0; row < 2; row++) {
+        for (let col = 0; col < 10; col++) {
+          const ledColor = Math.random() > 0.3 ? 0x00ff44 : 0x0099ff;
+          group.add(createBox(0.03, 0.03, 0.005, new THREE.MeshBasicMaterial({ color: ledColor }), -0.24 + col * 0.053, y - h * 0.15 + row * h * 0.3, 0.5, false, false));
+        }
+      }
+      group.add(createBox(0.46, h - 0.05, 0.015, new THREE.MeshStandardMaterial({ color: 0x1a1a20 }), 0, y, -0.44, false, true));
+      group.add(createBox(0.14, h * 0.5, 0.008, new THREE.MeshBasicMaterial({ color: 0x555555 }), -0.13, y, -0.45, false, false));
+      group.add(createBox(0.14, h * 0.5, 0.008, new THREE.MeshBasicMaterial({ color: 0x555555 }), 0.13, y, -0.45, false, false));
+    }
+
+    function createPDU(group, item, y, h) {
+      const pduMat = new THREE.MeshStandardMaterial({ color: 0x6a5a4a, roughness: 0.3, metalness: 0.5 });
+      const xOffset = item.label.toLowerCase().includes('right') ? 0.22 : -0.22;
+      const pdu = createBox(0.08, h - 0.02, 0.88, pduMat, xOffset, y, 0.02, true, true);
+      addEquipmentMesh(group, pdu, item);
+
+      for (let i = 0; i < 10; i++) {
+        group.add(createBox(0.035, 0.035, 0.008, new THREE.MeshBasicMaterial({ color: 0x222222 }), xOffset, y - h * 0.35 + i * h * 0.078, 0.47, false, false));
+      }
+    }
+
+    function createCableBundle(group) {
+      const cableColors = [0x00aaff, 0x00ff44, 0xffcc00, 0xff4444, 0xaaaaaa, 0xff8800, 0xcc44ff];
+      for (let i = 0; i < 25; i++) {
+        const cableMat = new THREE.MeshStandardMaterial({ color: cableColors[Math.floor(Math.random() * cableColors.length)], roughness: 0.4 });
+        const startY = 0.5 + Math.random() * 1.5;
+        const endY = 0.5 + Math.random() * 1.5;
+        const startX = -0.2 + Math.random() * 0.4;
+        const endX = -0.2 + Math.random() * 0.4;
+        const midZ = -0.75 - Math.random() * 0.3;
+
+        const curve = new THREE.CatmullRomCurve3([
+          new THREE.Vector3(startX, startY, -0.46),
+          new THREE.Vector3(startX * 0.5, (startY + endY) / 2 + (Math.random() - 0.5) * 0.2, midZ),
+          new THREE.Vector3(endX, endY, -0.46)
+        ]);
+        group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 12, 0.008, 6, false), cableMat));
+      }
+    }
+
+    // ============================================================
+    // UI LOGIC
+    // ============================================================
+    const detailOverlay = document.getElementById('rack-detail-overlay');
+    const detailTitle = document.getElementById('detail-rack-title');
+    const rackStatus = document.getElementById('rack-status');
+    const rackStatusText = document.getElementById('rack-status-text');
+    const viewButtons = document.querySelectorAll('#view-toggle button');
+
+    function openRackDetail(rack) {
+      currentRackId = rack.id;
+      currentView = 'front';
+      resetRackView();
+      isDetailOpen = true;
+      tooltip.style.display = 'none';
+      detailTitle.textContent = 'Rack ' + rack.rack;
+      const isSpare = rack.status === 'Spare' || rack.equipment.length === 0;
+      rackStatus.className = 'rack-status ' + (isSpare ? 'spare' : 'in-use');
+      rackStatusText.textContent = isSpare ? 'Not in use' : 'In use';
+      viewButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.view === 'front'));
+      createSimulationRack(rack);
+      renderRackDevices(rack);
+      detailOverlay.classList.add('open');
+    }
+
+    function closeRackDetail() {
+      detailOverlay.classList.remove('open');
+      currentRackId = null;
+      isDetailOpen = false;
+      tooltip.style.display = 'none';
+      clearRackSimulation();
+    }
+
+    document.getElementById('close-detail').addEventListener('click', closeRackDetail);
+
+    viewButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        currentView = btn.dataset.view;
+        viewButtons.forEach(b => b.classList.toggle('active', b === btn));
+        applyView();
+      });
+    });
+
+    function applyView() {
+      if (!simFrontDoor || !simBackDoor) return;
+      if (currentView === 'front') {
+        animateDoor(simFrontDoor, -Math.PI / 2.5);
+        animateDoor(simBackDoor, 0);
+      } else {
+        animateDoor(simFrontDoor, 0);
+        animateDoor(simBackDoor, Math.PI / 2.5);
+      }
+    }
+
+    function animateDoor(door, targetAngle) {
+      const startAngle = door.rotation.y;
+      const startTime = performance.now();
+      function step(now) {
+        const t = Math.min((now - startTime) / 500, 1);
+        const eased = 1 - Math.pow(1 - t, 3);
+        door.rotation.y = startAngle + (targetAngle - startAngle) * eased;
+        if (t < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    function animateCamera(targetPos, targetLookAt) {
+      const startPos = simCamera.position.clone();
+      const startTarget = simCamera.position.clone().add(simCamera.getWorldDirection(new THREE.Vector3()).multiplyScalar(2));
+      const startTime = performance.now();
+      function step(now) {
+        const t = Math.min((now - startTime) / 600, 1);
+        const eased = 1 - Math.pow(1 - t, 3);
+        simCamera.position.lerpVectors(startPos, targetPos, eased);
+        simCamera.lookAt(targetLookAt.clone().lerp(targetLookAt, eased));
+        if (t < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    function onSimPointerMove(event) {
+      if (!simRenderer || !simCamera || !isDetailOpen) return;
+      const rect = simRenderer.domElement.getBoundingClientRect();
+      const mouse = new THREE.Vector2(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(mouse, simCamera);
+      const intersects = raycaster.intersectObjects(simEquipmentMeshes, true);
+      if (intersects.length > 0) {
+        const data = intersects[0].object.userData;
+        tooltip.style.display = 'block';
+        tooltip.style.left = (event.clientX + 14) + 'px';
+        tooltip.style.top = (event.clientY + 14) + 'px';
+        tooltip.innerHTML = '<strong>' + esc(data.label) + '</strong><br>SN: ' + esc(data.item.serial || '-') + '<br>Status: ' + esc(data.item.status || '-') + '<br>Click to open in inventory';
+        simRenderer.domElement.style.cursor = 'pointer';
+      } else {
+        tooltip.style.display = 'none';
+        simRenderer.domElement.style.cursor = 'default';
+      }
+    }
+
+    function onSimClick(event) {
+      if (!simRenderer || !simCamera || !isDetailOpen || simMoved > 5) return;
+      const rect = simRenderer.domElement.getBoundingClientRect();
+      const mouse = new THREE.Vector2(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(mouse, simCamera);
+      const intersects = raycaster.intersectObjects(simEquipmentMeshes, true);
+      if (intersects.length > 0) {
+        const data = intersects[0].object.userData;
+        const url = CONFIG.openItemUrl + encodeURIComponent(data.equipmentId);
+        if (CONFIG.usePostMessage && window.opener) {
+          window.opener.postMessage({ action: 'openItem', itemId: data.equipmentId }, '*');
+        } else {
+          window.location.href = url;
+        }
+      }
+    }
+
+    // ============================================================
+    // MAIN SCENE INTERACTION
+    // ============================================================
+    const mainRaycaster = new THREE.Raycaster();
+    const mainMouse = new THREE.Vector2();
+    let hoveredRack = null;
+
+    function onPointerMove(event) {
+      if (isDetailOpen) { tooltip.style.display = 'none'; return; }
+      const rect = renderer.domElement.getBoundingClientRect();
+      mainMouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mainMouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      mainRaycaster.setFromCamera(mainMouse, camera);
+      const intersects = mainRaycaster.intersectObjects(rackMeshes, true);
+      let group = null;
+      for (let i = 0; i < intersects.length; i++) {
+        let obj = intersects[i].object;
+        while (obj) {
+          if (obj.userData && obj.userData.isRack) { group = obj; break; }
+          obj = obj.parent;
+        }
+        if (group) break;
+      }
+
+      if (hoveredRack && hoveredRack !== group) {
+        const hi = hoveredRack.children.find(c => c.userData.isHighlight);
+        if (hi) hi.visible = false;
+        hoveredRack = null;
+      }
+      if (group && group !== hoveredRack) {
+        hoveredRack = group;
+        const hi = hoveredRack.children.find(c => c.userData.isHighlight);
+        if (hi) hi.visible = true;
+      }
+
+      if (group) {
+        const rack = group.userData.rack;
+        tooltip.style.display = 'block';
+        tooltip.style.left = (event.clientX + 14) + 'px';
+        tooltip.style.top = (event.clientY + 14) + 'px';
+        tooltip.innerHTML = '<strong>Rack ' + rack.rack + '</strong><br>Items: ' + rack.equipment.length + '<br>Click to inspect';
+        document.body.style.cursor = 'pointer';
+      } else {
+        tooltip.style.display = 'none';
+        document.body.style.cursor = 'default';
+      }
+    }
+
+    function onClick(event) {
+      if (isDetailOpen || !hoveredRack) return;
+      openRackDetail(hoveredRack.userData.rack);
+    }
+
+    renderer.domElement.addEventListener('pointermove', onPointerMove);
+    renderer.domElement.addEventListener('click', onClick);
+
+    // ============================================================
+    // DATA LOADING
+    // ============================================================
+    // ============================================================
+    // MANAGE: add devices / racks. Writes go to the inventory (/api/items),
+    // so the 3D floor, the inventory table and the dashboard always agree.
+    // ============================================================
+    const $ = id => document.getElementById(id);
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+    let detailRack = null, demoMode = false, deepDone = false, locData = { locations: [], rows: [] }, locBound = false;
+
+    async function api(url, method, body) {
+      const r = await fetch(url, { method: method || 'GET', credentials: 'same-origin', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+      let d = {}; try { d = await r.json(); } catch (e) {}
+      if (r.status === 401) { location.href = 'index.html'; throw new Error('Signed out'); }
+      if (!r.ok) throw new Error(d.error || 'Request failed (' + r.status + ')');
+      return d;
+    }
+    function toast(m) { const t = $('mg-toast'); t.textContent = m; t.style.display = 'block'; clearTimeout(t._t); t._t = setTimeout(() => t.style.display = 'none', 3200); }
+    function openInInventory(id) {
+      if (CONFIG.usePostMessage && window.opener) window.opener.postMessage({ action: 'openItem', itemId: id }, '*');
+      else window.location.href = CONFIG.openItemUrl + encodeURIComponent(id);
+    }
+
+    // ---- data loading ----
+    async function loadLocations(selLoc, selRow) {
+      const ls = $('location-select'), rs = $('row-select');
+      try { locData = await api('/api/locations'); demoMode = false; }
+      catch (err) {
+        demoMode = true; $('location-controls').style.display = 'none';
+        rackData = getSampleRacks(); buildMainRacks(rackData); loading.style.display = 'none'; return;
+      }
+      const fillRows = (l, pick) => {
+        rs.innerHTML = '<option value="">Select row</option>';
+        locData.rows.filter(r => r.location === l).forEach(r => { const o = document.createElement('option'); o.value = o.textContent = r.row; rs.appendChild(o); });
+        if (pick) rs.value = pick;
+      };
+      ls.innerHTML = '<option value="">Select location</option>';
+      locData.locations.forEach(l => { const o = document.createElement('option'); o.value = o.textContent = l; ls.appendChild(o); });
+      if (!locBound) {
+        locBound = true;
+        ls.addEventListener('change', () => fillRows(ls.value));
+        rs.addEventListener('change', () => { currentLocation = ls.value; currentRow = rs.value; if (currentLocation && currentRow) loadRacks(currentLocation, currentRow); });
+      }
+      const q = new URLSearchParams(location.search);
+      const loc = selLoc || currentLocation || q.get('loc') || locData.locations[0] || '';
+      ls.value = loc; fillRows(loc);
+      const row = selRow || currentRow || q.get('row') || (locData.rows.find(r => r.location === loc) || {}).row || '';
+      if (loc && row) { rs.value = row; currentLocation = loc; currentRow = row; await loadRacks(loc, row); }
+      else { rackData = []; buildMainRacks(rackData); }
+      loading.style.display = 'none';
+    }
+
+    async function loadRacks(loc, row) {
+      loading.style.display = 'block';
+      try { rackData = await api('/api/racks?location=' + encodeURIComponent(loc) + '&row=' + encodeURIComponent(row)); demoMode = false; }
+      catch (err) { console.error(err); rackData = getSampleRacks(); demoMode = true; toast('Server unavailable - showing demo data'); }
+      buildMainRacks(rackData); loading.style.display = 'none';
+      const rk = new URLSearchParams(location.search).get('rack');   // deep link from inventory: ?loc=&row=&rack=
+      if (rk && !deepDone) { deepDone = true; const r = rackData.find(x => String(x.rack) === rk); if (r) openRackDetail(r); }
+    }
+
+    async function refresh(loc, row) {
+      await loadLocations(loc, row);
+      if (isDetailOpen && detailRack) { const r = rackData.find(x => String(x.rack) === String(detailRack.rack)); if (r) openRackDetail(r); }
+    }
+
+    // ---- rack logic ----
+    const racksFor = async (l, r) => (l === currentLocation && r === currentRow) ? rackData : api('/api/racks?location=' + encodeURIComponent(l) + '&row=' + encodeURIComponent(r));
+    function occupied(racks, rackNo) {
+      const set = new Set(), r = racks.find(x => String(x.rack) === String(rackNo));
+      if (r) r.equipment.forEach(e => { if (e.type === 'pdu') return; for (let i = 0; i < (e.uSize || 1); i++) set.add(e.uPosition + i); });
+      return set;
+    }
+    function freeU(racks, rackNo, size) {
+      const occ = occupied(racks, rackNo);
+      for (let u = 1; u + size - 1 <= 42; u++) { let ok = true; for (let i = 0; i < size; i++) if (occ.has(u + i)) { ok = false; break; } if (ok) return u; }
+      return 0;
+    }
+    const mk = o => Object.assign({ location: '', row: '', rack: '', u: '', model: '', serial: '', status: 'In use', purpose: '', owner: '', assetTag: '', item: '', firmware: '', user: '', contract: '', ip: '', conn10g: '', remarks: '', pduA: '', pduB: '' }, o);
+
+    async function addDevice(d) {
+      if (demoMode) throw new Error('Not connected to the inventory server (demo data is shown).');
+      d.location = (d.location || '').trim(); d.row = (d.row || '').trim(); d.rack = String(d.rack || '').trim();
+      d.model = (d.model || '').trim(); d.size = Math.max(1, parseInt(d.size) || 1); d.u = parseInt(d.u) || 0;
+      if (!d.location || !d.row || !d.rack) throw new Error('Location, row and rack are required.');
+      if (!d.model) throw new Error('Model / name is required.');
+      const racks = await racksFor(d.location, d.row);
+      if (!d.u) { d.u = freeU(racks, d.rack, d.size); if (!d.u) throw new Error('No free ' + d.size + 'U space in rack ' + d.rack + '.'); }
+      if (d.u < 1 || d.u + d.size - 1 > 42) throw new Error('U position must fit inside the 42U rack.');
+      const occ = occupied(racks, d.rack);
+      for (let i = 0; i < d.size; i++) if (occ.has(d.u + i)) throw new Error('U' + (d.u + i) + ' in rack ' + d.rack + ' is already used.');
+      const name = (d.type && !new RegExp('\\b' + d.type + '\\b', 'i').test(d.model)) ? d.type + ' ' + d.model : d.model;
+      await api('/api/items', 'POST', mk({ location: d.location, row: d.row, rack: d.rack, u: d.size > 1 ? d.u + '-' + (d.u + d.size - 1) : String(d.u), model: name, serial: d.serial || '', status: d.status || 'Active', purpose: d.purpose || '', owner: d.owner || '', assetTag: d.assetTag || '' }));
+      await refresh(d.location, d.row);
+      return { name, u: d.u, size: d.size, rack: d.rack };
+    }
+    async function addRack(l, r, no) {
+      if (demoMode) throw new Error('Not connected to the inventory server (demo data is shown).');
+      l = (l || '').trim(); r = (r || '').trim(); no = String(no || '').trim();
+      if (!l || !r || !no) throw new Error('Location, row and rack number are required.');
+      if ((await racksFor(l, r)).some(x => String(x.rack) === no)) throw new Error('Rack ' + no + ' already exists in this row.');
+      await api('/api/items', 'POST', mk({ location: l, row: r, rack: no, model: 'Empty slot', status: 'Not in use' }));
+      await refresh(l, r);
+    }
+    async function renameRack(l, r, current, next) {
+      if (demoMode) throw new Error('Not connected to the inventory server (demo data is shown).');
+      l = (l || '').trim(); r = (r || '').trim(); current = String(current || '').trim(); next = String(next || '').trim();
+      if (!l || !r || !current || !next) throw new Error('Location, row, current rack name and new rack name are required.');
+      await api('/api/racks/rename', 'PUT', { location: l, row: r, current, next });
+      if (detailRack && String(detailRack.rack) === current) detailRack.rack = next;
+      await refresh(l, r);
+    }
+
+    // ---- drawer UI ----
+    function setTab(t) { document.querySelectorAll('#mgr .tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t)); ['dev', 'rack', 'ai'].forEach(x => $('p-' + x).classList.toggle('on', x === t)); if (t === 'ai' && !$('ai-log').children.length) say(HELP); }
+    function openMgr(tab, pre) {
+      pre = pre || {}; const loc = pre.location || currentLocation || '', row = pre.row || currentRow || '';
+      $('dl-loc').innerHTML = locData.locations.map(l => '<option value="' + esc(l) + '">').join('');
+      $('dl-row').innerHTML = [...new Set(locData.rows.map(r => r.row))].map(l => '<option value="' + esc(l) + '">').join('');
+      $('m-loc').value = $('r-loc').value = loc; $('m-row').value = $('r-row').value = row; $('m-rack').value = pre.rack || '';
+      $('r-no').value = pre.rack || ''; $('r-new').value = ''; $('mg-rack').style.display = pre.editRack ? 'none' : ''; $('mg-rename').style.display = pre.editRack ? '' : 'none'; $('mg-delete').style.display = pre.editRack ? '' : 'none';
+      $('mg-err').textContent = $('mg-err2').textContent = ''; $('mgr').classList.add('open'); setTab(tab);
+    }
+    $('b-add').onclick = () => openMgr('dev'); $('b-rack').onclick = () => openMgr('rack'); $('b-ai').onclick = () => openMgr('ai');
+    $('b-add-here').onclick = () => openMgr('dev', { rack: detailRack && detailRack.rack });
+    $('b-edit-rack').onclick = () => openMgr('rack', { rack: detailRack && detailRack.rack, editRack: true });
+    $('mg-x').onclick = () => $('mgr').classList.remove('open');
+    document.querySelectorAll('#mgr .tabs button').forEach(b => b.onclick = () => setTab(b.dataset.t));
+    $('mg-save').onclick = async () => {
+      $('mg-err').textContent = '';
+      try {
+        const r = await addDevice({ location: $('m-loc').value, row: $('m-row').value, rack: $('m-rack').value, type: $('m-type').value, model: $('m-model').value, u: $('m-u').value, size: $('m-size').value, serial: $('m-serial').value, status: $('m-status').value, assetTag: $('m-tag').value, purpose: $('m-purpose').value, owner: $('m-owner').value });
+        toast('Added ' + r.name + ' at U' + r.u + ' (rack ' + r.rack + ')');
+        ['m-model', 'm-u', 'm-serial', 'm-tag', 'm-purpose'].forEach(i => $(i).value = ''); $('m-size').value = 1;
+      } catch (e) { $('mg-err').textContent = e.message; }
+    };
+    $('mg-rack').onclick = async () => {
+      $('mg-err2').textContent = '';
+      try { const no = $('r-no').value; await addRack($('r-loc').value, $('r-row').value, no); toast('Rack ' + no + ' created'); $('r-no').value = ''; }
+      catch (e) { $('mg-err2').textContent = e.message; }
+    };
+    $('mg-rename').onclick = async () => {
+      $('mg-err2').textContent = '';
+      try {
+        const current = $('r-no').value, next = $('r-new').value.trim();
+        await renameRack($('r-loc').value, $('r-row').value, current, next);
+        toast('Rack renamed to ' + next); $('r-no').value = next; $('r-new').value = '';
+        if (detailRack && String(detailRack.rack) === String(current).trim()) $('mgr').classList.remove('open');
+      } catch (e) { $('mg-err2').textContent = e.message; }
+    };
+    $('mg-delete').onclick = async () => {
+      $('mg-err2').textContent = '';
+      const location = $('r-loc').value.trim(), row = $('r-row').value.trim(), rack = $('r-no').value.trim();
+      if (!location || !row || !rack) { $('mg-err2').textContent = 'Location, row and rack are required.'; return; }
+      if (!confirm('Delete rack ' + rack + ' in ' + location + ' / ' + row + ' and every device inside it? This cannot be undone.')) return;
+      try {
+        const result = await api('/api/racks', 'DELETE', { location, row, rack });
+        $('mgr').classList.remove('open');
+        if (detailRack && String(detailRack.rack) === rack) closeRackDetail();
+        await refresh(location, row);
+        toast('Rack ' + rack + ' deleted (' + result.removed + ' item(s) removed)');
+      } catch (e) { $('mg-err2').textContent = e.message; }
+    };
+    function renderRackDevices(rack) {
+      detailRack = rack; const box = $('rack-devices'); box.innerHTML = '';
+      const list = (rack.equipment || []).slice().sort((a, b) => b.uPosition - a.uPosition);
+      $('dev-count').textContent = '(' + list.length + ')';
+      if (!list.length) { box.innerHTML = '<div class="tags-hint">No devices yet. Use “Add device”.</div>'; return; }
+      list.forEach(e => {
+        const b = document.createElement('button'); b.className = 'dv'; b.title = 'Open details';
+        const u = document.createElement('span'); u.className = 'u'; u.textContent = 'U' + e.uPosition + (e.uSize > 1 ? '–' + (e.uPosition + e.uSize - 1) : '');
+        const n = document.createElement('span'); n.className = 'nm'; n.textContent = e.label;
+        const s = document.createElement('span'); s.className = 'st'; s.textContent = e.status || '';
+        b.append(u, n, s); b.onclick = () => openInInventory(e.id); box.appendChild(b);
+      });
+    }
+
+    // ---- assistant: safe inventory actions plus explanatory AI chat ----
+    const HELP = 'I can explain data-center concepts and the inventory on screen, or help with safe actions. Try:\n• How many racks are there in total?\n• Which racks are vacant?\n• Which devices are in this rack?\n• add firewall FortiGate 100F to rack 5 u40\n• add rack 13\n• open rack 5\nUses the Location/Row selected at the top unless you say "location X row Y".';
+    const chat = { draft: null, ask: null, history: [] };
+    function chatMarkdown(text) { return esc(text).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/__(.+?)__/g, '<strong>$1</strong>'); }
+    function say(t, who) { const d = document.createElement('div'); d.className = 'cm ' + (who || 'bot'); d.innerHTML = who === 'me' ? esc(t) : chatMarkdown(t); $('ai-log').appendChild(d); $('ai-log').scrollTop = 1e9; }
+    function sayBtns(list) { const d = document.createElement('div'); d.className = 'cb'; list.forEach(x => { const b = document.createElement('button'); b.textContent = x[0]; b.onclick = () => { d.remove(); x[1](); }; d.appendChild(b); }); $('ai-log').appendChild(d); $('ai-log').scrollTop = 1e9; }
+    async function askAi(text) {
+      chat.history.push({ role: 'user', content: text });
+      try {
+        const d = await api('/api/ai/chat', 'POST', {
+          message: text,
+          messages: chat.history.slice(-10),
+          context: { location: currentLocation, row: currentRow, rack: detailRack && detailRack.rack }
+        });
+        chat.history.push({ role: 'assistant', content: d.answer });
+        say(d.answer);
+      } catch (e) {
+        chat.history.pop();
+        say('⚠ ' + e.message);
+      }
+    }
+    const cap = s => s.replace(/\b\w/g, c => c.toUpperCase());
+    function parseChat(t) {
+      let w = ' ' + t + ' ', o = {};
+      const take = (re, key, fn) => { const m = w.match(re); if (m) { o[key] = fn ? fn(m) : m[1]; w = w.replace(m[0], ' '); } };
+      take(/\b(?:serial(?:\s*(?:no|number))?|s\/n|sn)\s*[:#]?\s*([\w-]+)/i, 'serial');
+      take(/\blocation\s*[:#]?\s*([\w-]+)/i, 'location');
+      take(/\brow\s*[:#]?\s*((?:dc\s*)?[\w-]+)/i, 'row', m => m[1].toUpperCase());
+      take(/\brack\s*[:#]?\s*(\w+)/i, 'rack');
+      take(/\b(?:u|unit|slot)\s*#?\s*(\d+)\b/i, 'u');
+      take(/\b(\d+)\s*-?\s*u\b/i, 'size'); take(/\bsize\s*(\d+)/i, 'size');
+      take(/\b(not in use|unused|spare|inactive|decommissioned|in use|active)\b/i, 'status', m => /^(in use|active)$/i.test(m[1]) ? 'In use' : 'Not in use');
+      take(/\b(firewall|router|switch|load\s*balancer|server|storage|pdu)\b/i, 'type', m => m[1].toLowerCase().includes('load') ? 'Load Balancer' : m[1].toLowerCase() === 'pdu' ? 'PDU' : cap(m[1].toLowerCase()));
+      const model = w.replace(/\b(please|can you|could you|add|install|mount|put|place|create|new|a|an|the|to|in|into|on|at|of|with|device|for|me|my|and|called|named|model)\b/gi, ' ').replace(/[,;]+/g, ' ').replace(/\s+/g, ' ').trim();
+      if (model) o.model = model;
+      return o;
+    }
+    async function confirmDraft() {
+      const d = chat.draft; if (!d) return;
+      try { const r = await addDevice(Object.assign({}, d)); chat.draft = null; say('✅ Added ' + r.name + ' to rack ' + r.rack + ' at U' + r.u + (r.size > 1 ? '–U' + (r.u + r.size - 1) : '') + '. It is now on the floor plan and in the inventory.'); }
+      catch (e) { say('⚠ ' + e.message); }
+    }
+    async function onChat(text) {
+      say(text, 'me'); const low = text.toLowerCase().trim(); let m;
+      if (/^(yes|y|ok|okay|confirm|go|do it)\b/.test(low) && chat.draft && !chat.ask) return confirmDraft();
+      if (/^(cancel|no|stop|clear)\b/.test(low)) { chat.draft = chat.ask = null; return say('Cancelled.'); }
+      if (/^(help|\?|what can)/.test(low)) return say(HELP);
+      const hasType = /\b(firewall|router|switch|load\s*balancer|server|storage|pdu)\b/.test(low);
+      if (!hasType && (m = low.match(/\b(?:add|new|create)\s+(?:a\s+)?rack\s*#?\s*(\w+)/))) {
+        const p = parseChat(text);
+        try { await addRack(p.location || currentLocation, p.row || currentRow, m[1]); return say('✅ Rack ' + m[1] + ' created. Add devices with "add switch ... rack ' + m[1] + '".'); } catch (e) { return say('⚠ ' + e.message); }
+      }
+      if ((m = low.match(/^(?:open|show|view|go to)\s+rack\s*#?\s*(\w+)/))) {
+        const r = rackData.find(x => String(x.rack).toLowerCase() === m[1]); if (!r) return say('Rack ' + m[1] + ' is not in the current row.');
+        openRackDetail(r); return say('Opened rack ' + m[1] + '.');
+      }
+      const p = parseChat(text);
+      if (chat.ask && !chat.draft) chat.ask = null;
+      if (chat.ask === 'rack' && /^#?\w+$/.test(text.trim())) { chat.draft.rack = text.trim().replace('#', ''); }
+      else if (chat.ask === 'model' && !p.rack) { chat.draft.model = text.trim(); }
+      else       if (/\b(add|install|mount|new|put|place)\b/.test(low) || chat.draft) { chat.draft = Object.assign(chat.draft || {}, p); }
+      else return askAi(text);
+      const d = chat.draft; chat.ask = null;
+      d.location = d.location || currentLocation; d.row = d.row || currentRow; d.size = d.size || 1; d.status = d.status || 'In use';
+      if (!d.location || !d.row) return say('Select a Location and Row at the top first (or say "location X row Y").');
+      if (!d.rack) { chat.ask = 'rack'; return say('Which rack number?'); }
+      if (!d.model) { chat.ask = 'model'; return say('What is the model or name of the device?'); }
+      let note = '';
+      if (!d.u) { try { d.u = freeU(await racksFor(d.location, d.row), d.rack, +d.size); } catch (e) {} if (!d.u) return say('⚠ No free ' + d.size + 'U space in rack ' + d.rack + '.'); note = ' (first free slot)'; }
+      say('Add ' + (d.type ? d.type + ': ' : '') + d.model + '\n' + d.location + ' / ' + d.row + ' / rack ' + d.rack + ' / U' + d.u + note + ', ' + d.size + 'U' + (d.serial ? '\nSerial: ' + d.serial : '') + '\nStatus: ' + d.status);
+      sayBtns([['✅ Confirm & add', confirmDraft], ['✏ Edit in form', () => { openMgr('dev', d); ['type', 'model', 'u', 'size', 'serial', 'status'].forEach(k => { const e = $('m-' + k); if (e && d[k] != null) e.value = d[k]; }); }], ['Cancel', () => { chat.draft = null; say('Cancelled.'); }]]);
+    }
+    $('ai-go').onclick = () => { const t = $('ai-t').value.trim(); if (t) { $('ai-t').value = ''; onChat(t); } };
+    $('ai-t').addEventListener('keydown', e => { if (e.key === 'Enter') $('ai-go').click(); });
+
+    // viewers can look but not edit; signed-out users go back to the login page
+    fetch('/api/auth/status', { credentials: 'same-origin' }).then(r => r.json()).then(s => {
+      if (!s.user) { location.href = 'index.html'; return; }
+      if (s.user.role === 'viewer') {
+        ['b-add', 'b-rack', 'b-ai', 'b-add-here', 'b-edit-rack', 'mg-rack', 'mg-rename', 'mg-delete'].forEach(i => $(i).style.display = 'none');
+      }
+    }).catch(() => {});
+
+    // ============================================================
+    // INITIALIZE
+    // ============================================================
+    initRackSimulation();
+
+    function animateMain() {
+      requestAnimationFrame(animateMain);
+      renderer.render(scene, camera);
+    }
+    function animateSim() {
+      requestAnimationFrame(animateSim);
+      updateCamera();
+      if (simRenderer) simRenderer.render(simScene, simCamera);
+    }
+
+    loading.style.display = 'none';
+    animateMain();
+    animateSim();
+    loadLocations();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      if (simRenderer && simCamera) {
+        const simContainer = document.getElementById('rack-sim-container');
+        simCamera.aspect = simContainer.clientWidth / simContainer.clientHeight;
+        simCamera.updateProjectionMatrix();
+        simRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        simRenderer.setSize(simContainer.clientWidth, simContainer.clientHeight);
+      }
+    });
+  </script>
+</body>
+</html>

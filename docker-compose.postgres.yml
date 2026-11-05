@@ -1,0 +1,24 @@
+# Self-hosted PostgreSQL + the app, both in Docker:
+#   set DB_PASSWORD in .env, then:  docker compose -f docker-compose.postgres.yml up -d --build
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dc
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      POSTGRES_DB: dcinv
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  inventory:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://dc:${DB_PASSWORD}@db:5432/dcinv
+    depends_on:
+      - db
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
+volumes:
+  pgdata:

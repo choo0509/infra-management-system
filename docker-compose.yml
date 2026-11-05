@@ -1,0 +1,11 @@
+services:
+  inventory:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /app/data
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"   # host port : container port (both come from .env)
+    volumes:
+      - ./data:/app/data
