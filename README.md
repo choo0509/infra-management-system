@@ -1,9 +1,9 @@
-# Maxis Data Center Inventory — Server Edition
+# Maxis Data Center Inventory â€” Server Edition
 
 Node.js (v22.13 or newer) + SQLite web application with a real server-side login, shared data for all users, and a port you choose.
 
 ## Requirements
-Node.js **22.13 or newer** (24 is fine). SQLite is built into Node, so there is nothing to compile — no Visual Studio or Python needed on Windows.
+Node.js **22.13 or newer** (24 is fine). SQLite is built into Node, so there is nothing to compile â€” no Visual Studio or Python needed on Windows.
 
 ## Quick start
 ```bash
@@ -26,9 +26,17 @@ Then open `https://<server>:<PORT>`. The startup message changes from `http://` 
 - *Company use:* ask IT for a certificate for your server name (internal CA), or use Let's Encrypt (e.g. win-acme on Windows) if the server has a public domain name.
 - *Testing only (browser shows a warning):* in PowerShell as Administrator:
 ```powershell
-$c = New-SelfSignedCertificate -DnsName "localhost","inventory.yourcompany.local" -CertStoreLocation Cert:\LocalMachine\My -NotAfter (Get-Date).AddYears(2)
-Export-PfxCertificate -Cert $c -FilePath .\cert.pfx -Password (ConvertTo-SecureString "ChangeMe123" -AsPlainText -Force)
+$c = New-SelfSignedCertificate -DnsName "localhost" -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddYears(2)
+$password = ConvertTo-SecureString "choose-a-password" -AsPlainText -Force
+Export-PfxCertificate -Cert $c -FilePath .\cert.pfx -Password $password
 ```
+Then set the same password in `.env`:
+```
+SSL_PFX_FILE=cert.pfx
+SSL_PFX_PASSPHRASE=choose-a-password
+```
+The certificate and `.env` file stay on the machine running the application; do not commit either one.
+
 Alternative: keep Node on HTTP and let IIS / Nginx / Caddy provide HTTPS in front of it (see the production checklist).
 
 ## Viewing and resetting accounts
@@ -41,7 +49,7 @@ npm run users -- create <username> <password> admin
 Usernames are lower-case. Passwords are at least 8 characters.
 
 ## If login fails
-1. `npm run users -- list` — check the username exists (none listed = open the site once and create the administrator).
+1. `npm run users -- list` â€” check the username exists (none listed = open the site once and create the administrator).
 2. Check the server window: failed logins print `[login] failed for "name" (no such user / wrong password)`.
 3. Make sure `COOKIE_SECURE` is `auto` (or `false`) when you use `http://`. `true` forces secure cookies, which browsers reject over plain HTTP.
 4. Reset the password with the `reset` command above.
@@ -56,7 +64,7 @@ Edit `PORT` in `.env` and restart. With Docker the same `PORT` is used for the p
 | **User** | View, add, edit, import, export |
 | **Viewer** | View and export only |
 
-Admins grant access from **Profile → Access control**. Everyone can change their own password there.
+Admins grant access from **Profile â†’ Access control**. Everyone can change their own password there.
 
 ## Run with Docker
 ```bash
@@ -89,7 +97,7 @@ server {
 ```
 
 ## Using an online (PostgreSQL) database
-By default data is stored in a local SQLite file. To use an online database instead, set `DATABASE_URL` in `.env` — the app then uses PostgreSQL automatically (tables are created on first start).
+By default data is stored in a local SQLite file. To use an online database instead, set `DATABASE_URL` in `.env` â€” the app then uses PostgreSQL automatically (tables are created on first start).
 
 1. **Create a PostgreSQL database** with your provider (Azure Database for PostgreSQL, AWS RDS, Google Cloud SQL, Supabase, Neon, or your own server). Create an empty database, e.g. `dcinv`, plus a user with a strong password.
 2. **Allow your server to connect**: add the server's public IP to the database firewall / allow-list, and use the provider's SSL setting.
@@ -98,7 +106,7 @@ By default data is stored in a local SQLite file. To use an online database inst
    DATABASE_URL=postgres://username:password@your-db-host:5432/dcinv
    DATABASE_SSL=true
    ```
-   (If the password has special characters such as `@` or `#`, URL-encode them, e.g. `@` → `%40`.)
+   (If the password has special characters such as `@` or `#`, URL-encode them, e.g. `@` â†’ `%40`.)
 4. **Move your existing data** (stop the server first):
    ```
    npm install
@@ -121,7 +129,7 @@ Use **Import** (Admin/User). The importer recognises headers such as `EQUIPMENT/
 Data from the old browser-only version is not moved automatically: **Export** from the old version, then **Import** here.
 
 ## API (all under `/api`, JSON, cookie session)
-`POST /auth/setup · /auth/login · /auth/logout` · `GET /auth/status` · `POST /me/password` · `GET/POST /items` · `PUT/DELETE /items/:id` · `POST /items/import · /items/delete` · `DELETE /items` · `GET/POST /users` · `PATCH/DELETE /users/:username` (admin only)
+`POST /auth/setup Â· /auth/login Â· /auth/logout` Â· `GET /auth/status` Â· `POST /me/password` Â· `GET/POST /items` Â· `PUT/DELETE /items/:id` Â· `POST /items/import Â· /items/delete` Â· `DELETE /items` Â· `GET/POST /users` Â· `PATCH/DELETE /users/:username` (admin only)
 
 
 ## 3D Data Center
