@@ -1,9 +1,9 @@
-# Maxis Data Center Inventory â€” Server Edition
+# Data Center Inventory Server Edition
 
 Node.js (v22.13 or newer) + SQLite web application with a real server-side login, shared data for all users, and a port you choose.
 
 ## Requirements
-Node.js **22.13 or newer** (24 is fine). SQLite is built into Node, so there is nothing to compile â€” no Visual Studio or Python needed on Windows.
+Node.js **22.13 or newer** (24 is fine). SQLite is built into Node, so there is nothing to compile no Visual Studio or Python needed on Windows.
 
 ## Quick start
 ```bash
