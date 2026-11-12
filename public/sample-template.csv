@@ -1,5 +1,0 @@
-Location,ITEM,ROW,RACK,U#,EQUIPMENT/MATERIALS,SERIAL NUMBER,Firmware Version,PURPOSES/USAGES,ASSET TAG / DO,OWNER,USER,Contract/PO,REMARKS,iLo/IPMI,10G Connection,PDU A,PDU B
-DC1,1,2,1,42,Fortinet Fortigate 100D,SAMPLE-SN-0001,6.4.2,Perimeter firewall,C&S-000001,Network Team,CSE,PO-1001,,,,x,x
-DC1,2,2,1,41,Cable Management,,,,,,,,,,,,
-DC1,3,2,1,40,,,,,,,,,,,,,
-DC2,1,1,3,10,Cisco 3650,SAMPLE-SN-0002,16.12,Interconnect,C&S-000002,Network Team,CP,PO-1002,,,,x,
